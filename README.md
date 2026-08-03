@@ -1,20 +1,34 @@
 # sdui-nestjs
 
-Server-driven UI as a portable NestJS module: screens, draft/publish/version history, per-app
-navigation config, localized strings, preview tokens, multi-tenant `App` scoping, an optional
-push sub-module, and a live-reload Socket.IO gateway.
+A NestJS module for **server-driven UI**: your backend owns a JSON "descriptor" for each app
+screen, and mobile/web clients render it instead of hardcoding layouts. Ship a new screen or
+tweak an existing one by publishing new JSON — no app store release required.
 
-Extracted from the `portee` backend. See `backend/docs/sdui-extraction-design.md` in that repo
-for the design rationale behind the seams below.
+This package gives you the full authoring + serving backend for that: screen CRUD with
+draft/publish/version history, per-app navigation config, localized strings, preview tokens (so
+a designer can test an unpublished screen on a real device), multi-tenant `App` scoping (one
+deployment can serve several apps, each with their own screens/strings/nav), an optional push
+notification helper, and a Socket.IO gateway that tells connected clients "a new version was
+published, go refetch."
+
+It does **not** include a renderer — you still need frontend/mobile code that turns the JSON
+descriptor into actual UI widgets. See [What this package does not include](#what-this-package-does-not-include).
+
+## Is this for you?
+
+You want this if you're building a NestJS backend and you want app screens to be editable from a
+CMS-style admin panel without redeploying the mobile app. You don't want this if you just need a
+CMS for marketing content (use a headless CMS instead) — this is specifically for driving native
+app *screen structure*, not blog posts.
 
 ## Requirements
 
-- **PostgreSQL only.** Migrations use `jsonb`, Postgres check constraints, and
-  `uuid_generate_v4()` (requires the `uuid-ossp` extension). Other TypeORM drivers are
-  untested and unsupported.
-- **Express**, not Fastify — a few endpoints (`@Res()` handlers for ETag/ Cache-Control headers)
-  are typed against `express.Request`/`Response`.
-- NestJS 11, TypeORM 0.3.x, Zod 4.
+- **NestJS 11**, running on **Express** (not Fastify — a few endpoints set `ETag`/`Cache-Control`
+  headers via `@Res()` typed against `express.Response`).
+- **PostgreSQL**, via **TypeORM 0.3.x**. Migrations use `jsonb` columns, Postgres check
+  constraints, and `uuid_generate_v4()` (needs the `uuid-ossp` extension enabled on your database).
+  Other TypeORM drivers (MySQL, SQLite, ...) are untested and unsupported.
+- **Zod 4** for the descriptor schema.
 
 ## Install
 
@@ -22,26 +36,30 @@ for the design rationale behind the seams below.
 npm install sdui-nestjs
 ```
 
-Then copy the migration set into your own migrations folder (there is no scaffolding CLI yet —
-see `backend/docs/sdui-extraction-design.md` §5 for that plan):
+### Run the migrations
 
-```ts
-import { SDUI_MIGRATIONS } from 'sdui-nestjs';
-// SDUI_MIGRATIONS is an ordered array of MigrationInterface classes.
-// Copy the corresponding files from node_modules/sdui-nestjs/dist/migrations
-// into your project's migrations directory, or reference them directly in your
-// TypeORM CLI data source config's `migrations` glob.
+There's no CLI yet (see [docs/design.md §5](docs/design.md) for that plan), so for now: copy the
+migration files into your own project's migrations folder.
+
+```bash
+cp node_modules/sdui-nestjs/dist/migrations/*.js src/database/migrations/
 ```
 
-## Wiring it in
+Then run them the normal way your project runs TypeORM migrations (e.g. `typeorm migration:run`).
+If you'd rather generate your own schema, `SDUI_MIGRATIONS` (exported from the package) is the
+same ordered array of `MigrationInterface` classes, in case you want to inspect them or run them
+programmatically instead of copying files.
+
+### Wire the module in
 
 ```ts
+import { Module } from '@nestjs/common';
 import { SduiModule } from 'sdui-nestjs';
 
 @Module({
   imports: [
     SduiModule.forRoot({
-      // Omit any of these to fall back to a safe default (see below).
+      // All four options below are optional — see "Configuring the four ports".
       authGuard: { useClass: MyAppAuthGuard },
       cache: { useClass: MyRedisCacheAdapter },
       audit: { useClass: MyAuditLogAdapter },
@@ -52,52 +70,124 @@ import { SduiModule } from 'sdui-nestjs';
 export class AppModule {}
 ```
 
-## The four seams
+That's it — `SduiModule` registers its own entities (via `autoLoadEntities: true` on your
+`TypeOrmModule`, or by importing them into your own entities list) and exposes the full REST API
+(admin routes under `/admin/sdui/*`, public routes under `/sdui/*`) plus the `/sdui-config`
+Socket.IO namespace.
 
-SDUI has no hard dependency on any specific auth system, cache, or audit log — it depends on
-four small ports, each configurable via `SduiModuleOptions`:
+## Configuring the four ports
 
-| Option | Port | Default if omitted |
+SDUI doesn't hardcode an auth system, a cache, or an audit log — it depends on four small
+interfaces ("ports"), each independently configurable. **If you skip a port, a safe default is
+used** so you can get the module running before wiring up the real thing.
+
+| Option | What it's for | If you don't supply it |
 |---|---|---|
-| `authGuard` | `CanActivate`, must attach `request.sduiActor: SduiActor` | Allow-all guard — **logs a startup warning**, treats every request as an authenticated actor with `bypassPermissionChecks: true`. Replace before deploying with real admin users. |
-| `cache` | `SduiCachePort` (`get`/`set`/`del`/`incr`/`keys`/`isHealthy`) | Process-local in-memory `Map`. Every call site already falls through to Postgres on a cache miss/failure, so this is safe but won't be shared across multiple instances. |
-| `audit` | `SduiAuditPort` (`record(actorId, action, targetId?, targetType?, meta?)`) | No-op — entries are discarded. |
-| `deepLinkBaseUrl` | plain string | Omitted — `GET /sdui/link/:slug` returns only `appScheme`, no `universalUrl`. |
+| `authGuard` | A `CanActivate` that authenticates the request and attaches `request.sduiActor: SduiActor`. | An allow-all guard is used — it **logs a warning on every use** and treats every request as a super-admin. Fine for local dev, never use it once real users exist. |
+| `cache` | Implements `SduiCachePort`: `get/set/del/incr/keys/isHealthy`. Backs manifest/nav/strings caching and preview-token storage. | An in-process `Map`. Works for a single instance; every call site already falls back to Postgres on a cache miss, so this is safe, just not shared across multiple app instances. |
+| `audit` | Implements `SduiAuditPort`: `record(actorId, action, targetId?, targetType?, meta?)`. Called on every create/update/publish/delete. | No-op — nothing is recorded. |
+| `deepLinkBaseUrl` | A plain string, your app's public domain (e.g. `https://app.example.com`). Used to build the `universalUrl` returned by `GET /sdui/link/:slug`. | Omitted from responses — you still get `appScheme`, just no universal link. |
 
-Each of `authGuard`/`cache`/`audit` accepts the same shape NestJS itself uses for async module
-options: `{ useClass }`, `{ useValue }`, or `{ useFactory, inject }`.
-
-Actor identity is a plain `actorId: string` with no foreign key to any host entity — SDUI's
-`createdBy`/`publishedBy`/`savedBy`/`updatedBy`/`deletedBy` columns are uuid/string columns by
-convention only, so they don't care what your admin/user model looks like.
-
-## Push notifications (optional)
-
-Push is not part of the core module — it needs a Firebase/APNs-style sender and a way to look up
-device tokens, both of which are entirely host-specific. Import `SduiPushModule` separately if
-you want it:
+Each of `authGuard` / `cache` / `audit` accepts the same option shape NestJS itself uses for
+async module config — supply exactly one of:
 
 ```ts
+{ useClass: MyImplementation }
+{ useValue: someInstance }
+{ useFactory: (dep1, dep2) => new MyImplementation(dep1, dep2), inject: [Dep1, Dep2] }
+```
+
+### Example: a real Redis cache adapter
+
+```ts
+import { Injectable } from '@nestjs/common';
+import type { SduiCachePort } from 'sdui-nestjs';
+import Redis from 'ioredis';
+
+@Injectable()
+export class MyRedisCacheAdapter implements SduiCachePort {
+  private readonly redis = new Redis(process.env.REDIS_URL);
+
+  get(key: string) {
+    return this.redis.get(key);
+  }
+  async set(key: string, value: string, ttlSeconds?: number) {
+    if (ttlSeconds) await this.redis.set(key, value, 'EX', ttlSeconds);
+    else await this.redis.set(key, value);
+  }
+  async del(...keys: string[]) {
+    if (keys.length) await this.redis.del(...keys);
+  }
+  incr(key: string) {
+    return this.redis.incr(key);
+  }
+  keys(pattern: string) {
+    return this.redis.keys(pattern);
+  }
+  async isHealthy() {
+    try {
+      await this.redis.ping();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+```
+
+### Actor identity, on purpose, isn't your `User`/`Admin` model
+
+`SduiActor` is just `{ actorId: string; permissions?: string[]; bypassPermissionChecks?: boolean }`.
+The columns that record who did what (`createdBy`, `publishedBy`, `savedBy`, `updatedBy`,
+`deletedBy`) are plain `uuid`/`string` columns with **no foreign key** to any entity SDUI defines
+— so it never needs to know what your admin/user table looks like. Your `authGuard` is
+responsible for populating `actorId` (and `permissions`, checked by `RequireSduiPermission()` on
+admin routes) however makes sense for your app.
+
+## Push notifications (optional, separate module)
+
+Push isn't part of the core module — sending a push notification needs a provider (Firebase,
+APNs, ...) and a way to look up device tokens, both of which are entirely specific to your app.
+Import `SduiPushModule` only if you want `POST /admin/sdui/push` to exist:
+
+```ts
+import { Module } from '@nestjs/common';
 import { SduiPushModule } from 'sdui-nestjs';
 
 @Module({
   imports: [
     SduiPushModule.forRoot({
-      push: { useClass: MyFirebasePushAdapter },       // implements SduiPushPort
-      deviceTokens: { useClass: MyDeviceTokenAdapter }, // implements SduiDeviceTokenPort
+      push: { useClass: MyFirebasePushAdapter },        // implements SduiPushPort
+      deviceTokens: { useClass: MyDeviceTokenAdapter },  // implements SduiDeviceTokenPort
     }),
   ],
 })
 export class AppModule {}
 ```
 
-If you don't import `SduiPushModule`, `POST /admin/sdui/push` simply doesn't exist.
+`SduiPushPort.sendToTokens(tokens, title, body, data)` sends the notification and reports back any
+tokens the provider rejected as invalid; `SduiDeviceTokenPort` looks up tokens for a target
+audience and lets SDUI ask you to invalidate the ones that bounced. If you don't import
+`SduiPushModule` at all, the route simply doesn't exist — no Firebase dependency is pulled in.
 
-## What's not included
+## What this package does not include
 
-- The frontend WYSIWYG preview renderer and the mobile production renderer are **not** part of
-  this package. The descriptor schema (`descriptor.schema.ts`) and component registry
-  (`component-registry.ts`) exported here are the source of truth, but each consuming
-  frontend/mobile app is responsible for its own renderer implementation — and for keeping it in
-  sync with this schema. See `backend/docs/sdui-assessment.md` in the original `portee` repo for
-  the drift risk this creates.
+- **A renderer.** The Zod descriptor schema (`descriptor.schema.ts`) and component registry
+  (`component-registry.ts`) exported from this package are the source of truth for what a valid
+  screen looks like, but turning that JSON into actual UI (a web preview, a Flutter/React Native
+  renderer, whatever your client is) is your app's job. Keeping a hand-written renderer in sync
+  with this schema as you add components is a real, ongoing maintenance cost — budget for it.
+- **Postgres migration portability.** See [Requirements](#requirements) — this is a Postgres-only
+  package today, deliberately, not an oversight (see [docs/design.md §4](docs/design.md)).
+- **A scaffolding CLI.** Wiring this into a fresh project today means the manual steps above.
+  See [docs/design.md §5](docs/design.md) for the plan to fix that.
+
+## More background
+
+[docs/design.md](docs/design.md) has the fuller design rationale — why each port is shaped the
+way it is, why push is a separate module, why Postgres-only, and what a scaffolding CLI would
+look like if someone builds one.
+
+## License
+
+UNLICENSED (private/internal use). See `package.json`.

@@ -2,8 +2,16 @@
   "name": "sdui-nestjs",
   "version": "0.1.0",
   "description": "Server-driven UI (screens, versions, publish/rollback, nav config, localization, preview tokens, multi-tenant apps) as a portable NestJS module.",
-  "license": "UNLICENSED",
-  "private": true,
+  "keywords": ["nestjs", "server-driven-ui", "sdui", "typeorm", "postgres"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://gitlab.com/d24-group/sdui-nestjs.git"
+  },
+  "bugs": {
+    "url": "https://gitlab.com/d24-group/sdui-nestjs/-/issues"
+  },
+  "homepage": "https://gitlab.com/d24-group/sdui-nestjs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -12,6 +20,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "clean": "rimraf dist",
+    "prepare": "npm run clean && npm run build",
+    "prepublishOnly": "npm run clean && npm run build",
     "lint": "eslint \"src/**/*.ts\" --fix",
     "test": "jest"
   },
