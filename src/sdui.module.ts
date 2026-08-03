@@ -97,20 +97,26 @@ export class SduiModule {
       global: options.isGlobal ?? false,
       imports: [TypeOrmModule.forFeature(SDUI_ENTITIES)],
       controllers: [
-        SduiAdminController,
+        // Static/literal-path controllers must be registered before
+        // SduiAdminController (which has GET/PATCH/DELETE :id) — Nest/Express
+        // match routes in registration order, so e.g. GET /admin/sdui/nav
+        // would otherwise hit the generic :id route first and ParseUUIDPipe
+        // would reject "nav" as not a UUID.
         SduiAppsController,
-        SduiDeepLinkController,
-        SduiErrorReportPublicController,
-        SduiErrorReportAdminController,
         SduiNavAdminController,
         SduiNavPublicController,
-        SduiPreviewAdminController,
-        SduiPreviewPublicController,
-        SduiPublicController,
-        SduiV1PublicController,
-        SduiAdminPublishController,
         SduiStringsAdminController,
         SduiStringsPublicController,
+        SduiPreviewAdminController,
+        SduiPreviewPublicController,
+        SduiErrorReportPublicController,
+        SduiErrorReportAdminController,
+        SduiDeepLinkController,
+        // Generic /:id controller last.
+        SduiAdminController,
+        SduiAdminPublishController,
+        SduiPublicController,
+        SduiV1PublicController,
       ],
       providers: [
         SduiService,
