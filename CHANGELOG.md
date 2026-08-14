@@ -5,6 +5,8 @@ All notable changes to this package are documented here. Format loosely follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-14
+
 ### Changed
 
 - Fixed a license inconsistency: the README previously said "UNLICENSED (private/internal use)"

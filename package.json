@@ -1,6 +1,6 @@
 {
   "name": "sdui-nestjs",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Server-driven UI (screens, versions, publish/rollback, nav config, localization, preview tokens, multi-tenant apps) as a portable NestJS module.",
   "keywords": ["nestjs", "server-driven-ui", "sdui", "typeorm", "postgres"],
   "license": "MIT",
