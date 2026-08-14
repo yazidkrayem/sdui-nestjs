@@ -9,7 +9,7 @@ export interface ScreenTemplate {
   descriptor: Descriptor;
 }
 
-const PLACEHOLDER_IMAGE = 'https://assets.portee.app/placeholder.jpg';
+const PLACEHOLDER_IMAGE = 'https://placehold.co/600x400';
 
 export const SCREEN_TEMPLATES: ScreenTemplate[] = [
   {

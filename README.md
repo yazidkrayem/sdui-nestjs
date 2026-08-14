@@ -1,5 +1,8 @@
 # sdui-nestjs
 
+[![CI](https://github.com/yazidkrayem/sdui-nestjs/actions/workflows/ci.yml/badge.svg)](https://github.com/yazidkrayem/sdui-nestjs/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/sdui-nestjs.svg)](https://www.npmjs.com/package/sdui-nestjs)
+
 A NestJS module for **server-driven UI**: your backend owns a JSON "descriptor" for each app
 screen, and mobile/web clients render it instead of hardcoding layouts. Ship a new screen or
 tweak an existing one by publishing new JSON — no app store release required.
@@ -190,4 +193,4 @@ look like if someone builds one.
 
 ## License
 
-UNLICENSED (private/internal use). See `package.json`.
+MIT — see [LICENSE](LICENSE).

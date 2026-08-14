@@ -4,14 +4,18 @@
   "description": "Server-driven UI (screens, versions, publish/rollback, nav config, localization, preview tokens, multi-tenant apps) as a portable NestJS module.",
   "keywords": ["nestjs", "server-driven-ui", "sdui", "typeorm", "postgres"],
   "license": "MIT",
+  "author": "Yazid Krayem",
   "repository": {
     "type": "git",
-    "url": "git+https://gitlab.com/d24-group/sdui-nestjs.git"
+    "url": "git+https://github.com/yazidkrayem/sdui-nestjs.git"
   },
   "bugs": {
-    "url": "https://gitlab.com/d24-group/sdui-nestjs/-/issues"
+    "url": "https://github.com/yazidkrayem/sdui-nestjs/issues"
   },
-  "homepage": "https://gitlab.com/d24-group/sdui-nestjs",
+  "homepage": "https://github.com/yazidkrayem/sdui-nestjs",
+  "engines": {
+    "node": ">=18"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -66,6 +70,7 @@
     "@types/node": "^22.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "eslint": "^9.9.0",
     "jest": "^29.7.0",
     "pg": "^8.11.0",
     "reflect-metadata": "^0.2.0",
@@ -75,6 +80,7 @@
     "ts-jest": "^29.1.0",
     "typeorm": "^1.0.0",
     "typescript": "^5.4.0",
+    "typescript-eslint": "^8.3.0",
     "zod": "^4.0.0"
   }
 }
